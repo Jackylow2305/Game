@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>南瓜人冒险岛</title>
+
+<style>
+body{
+    margin:0;
+    background:#222;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    color:white;
+    font-family:Arial;
+}
+
+#box{
+    background:#333;
+    padding:15px;
+    border-radius:12px;
+    text-align:center;
+}
+
+canvas{
+    background:linear-gradient(#87ceeb,#90ee90);
+    border:3px solid #000;
+}
+</style>
+</head>
+
+<body>
+
+<div id="box">
+
+<h2>🎃 南瓜人冒险岛</h2>
+<p>← → 移动 | ↑ 跳跃 | J 攻击</p>
+
+<div id="info"></div>
+
+<canvas id="game" width="900" height="450"></canvas>
+
+</div>
+
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const info = document.getElementById("info");
+
+
+/* ================= 图片 ================= */
+
+const walkImg = new Image();
+walkImg.src = "pumpkin_character.png";
+
+const attackImg = new Image();
+attackImg.src = "attack.png";
+
+
+/* ================= 参数 ================= */
+
+const WALK_FRAMES = 5;
+const ATTACK_FRAMES = 6;
+
+const gravity = 0.8;
+const ground = 400;
+
+
+/* ================= 玩家 ================= */
+
+const player = {
+
+    x:100,
+    y:330,
+
+    width:60,
+    height:70,
+
+    vx:0,
+    vy:0,
+
+    speed:5,
+    jump:16,
+
+    onGround:false,
+    face:1,
+
+    anim:0,
+
+    attacking:false,
+    atkFrame:0,
+    cooldown:0,
+
+    /* RPG */
+
+    level:1,
+    exp:0,
+    maxExp:5,
+
+    hp:100,
+    maxHp:100,
+
+    atk:20
+};
+
+
+/* ================= 敌人 ================= */
+
+let enemies = [];
+
+
+function spawnEnemy(){
+
+    enemies.push({
+
+        x:800 + Math.random()*200,
+        y:330,
+
+        width:50,
+        height:60,
+
+        hp:50,
+        maxHp:50,
+
+        speed:1.5,
+
+        alive:true
+    });
+}
+
+
+/* 初始生成 */
+
+for(let i=0;i<3;i++){
+    spawnEnemy();
+}
+
+
+/* ================= 控制 ================= */
+
+let keys = {};
+
+
+document.addEventListener("keydown",e=>{
+
+    keys[e.code]=true;
+
+    if(e.code==="KeyJ") attack();
+
+    if(e.code==="ArrowUp") jump();
+});
+
+document.addEventListener("keyup",e=>{
+    keys[e.code]=false;
+});
+
+
+function jump(){
+
+    if(player.onGround){
+        player.vy = -player.jump;
+        player.onGround=false;
+    }
+}
+
+
+function attack(){
+
+    if(player.cooldown>0) return;
+    if(player.attacking) return;
+
+    player.attacking=true;
+    player.atkFrame=0;
+    player.cooldown=25;
+
+    hitEnemy();
+}
+
+
+/* ================= 攻击判定 ================= */
+
+function hitEnemy(){
+
+    enemies.forEach(e=>{
+
+        if(!e.alive) return;
+
+        let range = 60;
+
+        let ax = player.face===1 ?
+                 player.x+player.width :
+                 player.x-range;
+
+        let ay = player.y;
+
+        if(
+            ax < e.x+e.width &&
+            ax+range > e.x &&
+            ay < e.y+e.height &&
+            ay+player.height > e.y
+        ){
+
+            e.hp -= player.atk;
+
+            if(e.hp<=0){
+
+                e.alive=false;
+
+                gainExp(1);
+
+                setTimeout(spawnEnemy,2000);
+            }
+        }
+    });
+}
+
+
+/* ================= 经验升级 ================= */
+
+function gainExp(v){
+
+    player.exp += v;
+
+    if(player.exp>=player.maxExp){
+
+        player.exp=0;
+
+        player.level++;
+
+        player.maxExp += 3;
+
+        player.maxHp += 20;
+        player.hp = player.maxHp;
+
+        player.atk += 5;
+    }
+}
+
+
+/* ================= 更新 ================= */
+
+function update(){
+
+/* 移动 */
+
+    if(keys["ArrowLeft"]){
+
+        player.vx = -player.speed;
+        player.face = -1;
+
+    }else if(keys["ArrowRight"]){
+
+        player.vx = player.speed;
+        player.face = 1;
+
+    }else{
+
+        player.vx *= 0.8;
+    }
+
+    player.x += player.vx;
+
+
+/* 重力 */
+
+    player.vy += gravity;
+    player.y += player.vy;
+
+
+/* 地面 */
+
+    if(player.y+player.height>=ground){
+
+        player.y = ground-player.height;
+        player.vy=0;
+        player.onGround=true;
+    }
+
+
+/* 冷却 */
+
+    if(player.cooldown>0) player.cooldown--;
+
+
+/* 动画 */
+
+    if(Math.abs(player.vx)>0.5){
+        player.anim++;
+    }
+
+
+/* 敌人AI */
+
+    enemies.forEach(e=>{
+
+        if(!e.alive) return;
+
+        if(e.x > player.x){
+            e.x -= e.speed;
+        }else{
+            e.x += e.speed;
+        }
+
+        /* 碰撞伤害 */
+
+        if(
+            player.x < e.x+e.width &&
+            player.x+player.width > e.x &&
+            player.y < e.y+e.height &&
+            player.y+player.height > e.y
+        ){
+
+            player.hp -= 0.2;
+
+            if(player.hp<=0){
+                alert("💀 你死了！");
+                location.reload();
+            }
+        }
+    });
+}
+
+
+/* ================= 绘制 ================= */
+
+function drawPlayer(){
+
+    ctx.save();
+
+    if(player.face===-1){
+
+        ctx.scale(-1,1);
+        ctx.translate(-player.x*2-player.width,0);
+    }
+
+
+/* 攻击 */
+
+    if(player.attacking && attackImg.complete){
+
+        const f = Math.floor(player.atkFrame);
+
+        ctx.drawImage(
+
+            attackImg,
+
+            f*(attackImg.width/ATTACK_FRAMES),
+            0,
+
+            attackImg.width/ATTACK_FRAMES,
+            attackImg.height,
+
+            player.x,
+            player.y,
+            player.width,
+            player.height
+        );
+
+        player.atkFrame += 0.3;
+
+        if(player.atkFrame>=ATTACK_FRAMES){
+
+            player.attacking=false;
+        }
+
+    }
+
+/* 走路 */
+
+    else if(walkImg.complete){
+
+        const f = Math.floor(player.anim/6)%WALK_FRAMES;
+
+        ctx.drawImage(
+
+            walkImg,
+
+            f*(walkImg.width/WALK_FRAMES),
+            0,
+
+            walkImg.width/WALK_FRAMES,
+            walkImg.height,
+
+            player.x,
+            player.y,
+            player.width,
+            player.height
+        );
+    }
+
+    ctx.restore();
+}
+
+
+/* ================= 敌人绘制 ================= */
+
+function drawEnemies(){
+
+    enemies.forEach(e=>{
+
+        if(!e.alive) return;
+
+        const cx = e.x + e.width/2;
+        const cy = e.y + e.height/2;
+        const r  = e.width/2;
+
+        /* 身体（圆形） */
+        ctx.fillStyle = "#9b1c31"; // 深红怪物
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI*2);
+        ctx.fill();
+
+        /* 眼睛 */
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(cx - 8, cy - 5, 5, 0, Math.PI*2);
+        ctx.arc(cx + 8, cy - 5, 5, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(cx - 8, cy - 5, 2, 0, Math.PI*2);
+        ctx.arc(cx + 8, cy - 5, 2, 0, Math.PI*2);
+        ctx.fill();
+
+        /* 嘴巴 */
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy + 5, 10, 0, Math.PI);
+        ctx.stroke();
+
+        /* 血条 */
+        ctx.fillStyle = "black";
+        ctx.fillRect(e.x, e.y - 10, e.width, 5);
+
+        ctx.fillStyle = "lime";
+        ctx.fillRect(
+            e.x,
+            e.y - 10,
+            e.width * (e.hp / e.maxHp),
+            5
+        );
+    });
+}
+
+
+/* ================= 地面 ================= */
+
+function drawGround(){
+
+    ctx.fillStyle="#228B22";
+    ctx.fillRect(0,ground,900,50);
+
+    ctx.fillStyle="#8B4513";
+    ctx.fillRect(0,ground+20,900,50);
+}
+
+
+/* ================= UI ================= */
+
+function drawUI(){
+
+    info.innerHTML = `
+    等级：${player.level}
+    | HP：${Math.floor(player.hp)}/${player.maxHp}
+    | EXP：${player.exp}/${player.maxExp}
+    | 攻击：${player.atk}
+    `;
+}
+
+
+/* ================= 主循环 ================= */
+
+function loop(){
+
+    ctx.clearRect(0,0,900,450);
+
+    update();
+
+    drawGround();
+
+    drawEnemies();
+
+    drawPlayer();
+
+    drawUI();
+
+    requestAnimationFrame(loop);
+}
+
+loop();
+
+</script>
+
+</body>
+</html>
